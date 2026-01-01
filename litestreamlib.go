@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/benbjohnson/litestream"
+	"github.com/benbjohnson/litestream/s3"
 	"github.com/superfly/ltx"
 )
 
@@ -182,4 +183,67 @@ func WaitForSync(ctx context.Context, db *litestream.DB, pollInterval time.Durat
 			// Continue polling
 		}
 	}
+}
+
+// S3Config contains configuration for creating an S3 replica client.
+// Optional auth fields (AccessKeyID, SecretAccessKey) override environment
+// variables when set, matching the behavior of litestream's YAML config.
+type S3Config struct {
+	// Required: S3 bucket name
+	Bucket string
+	// Required: Path prefix within the bucket (e.g., "backups/mydb")
+	Path string
+
+	// Optional: AWS region (default: us-east-1)
+	Region string
+	// Optional: Custom endpoint for S3-compatible services (e.g., MinIO, Backblaze B2)
+	Endpoint string
+	// Optional: Force path-style addressing (required for some S3-compatible services)
+	ForcePathStyle bool
+	// Optional: Skip TLS certificate verification (for self-signed certs)
+	SkipVerify bool
+
+	// Optional: AWS access key ID (overrides AWS_ACCESS_KEY_ID env var when set)
+	AccessKeyID string
+	// Optional: AWS secret access key (overrides AWS_SECRET_ACCESS_KEY env var when set)
+	SecretAccessKey string
+}
+
+// NewS3ReplicaClient creates an S3 replica client from configuration.
+// If AccessKeyID/SecretAccessKey are empty, the client will fall back to
+// environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) or
+// other AWS credentials sources (IAM role, etc.) at connection time.
+func NewS3ReplicaClient(cfg S3Config) (*s3.ReplicaClient, error) {
+	if cfg.Bucket == "" {
+		return nil, fmt.Errorf("bucket is required")
+	}
+	if cfg.Path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+
+	client := s3.NewReplicaClient()
+	client.Bucket = cfg.Bucket
+	client.Path = cfg.Path
+
+	// Set region (default handled by litestream if empty)
+	if cfg.Region != "" {
+		client.Region = cfg.Region
+	}
+
+	// S3-compatible service settings
+	if cfg.Endpoint != "" {
+		client.Endpoint = cfg.Endpoint
+	}
+	client.ForcePathStyle = cfg.ForcePathStyle
+	client.SkipVerify = cfg.SkipVerify
+
+	// Auth credentials - override env vars when explicitly set
+	if cfg.AccessKeyID != "" {
+		client.AccessKeyID = cfg.AccessKeyID
+	}
+	if cfg.SecretAccessKey != "" {
+		client.SecretAccessKey = cfg.SecretAccessKey
+	}
+
+	return client, nil
 }

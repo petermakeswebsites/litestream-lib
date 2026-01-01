@@ -14,6 +14,7 @@ A convenience wrapper around [litestream](https://github.com/benbjohnson/litestr
 - **`IsHealthy`** - Check if the replica is reachable
 - **`RestoreToPath`** - Restore to a custom path (for copies/testing)
 - **`WaitForSync`** - Poll until local and remote TXIDs match
+- **`NewS3ReplicaClient`** - Create S3 client with programmatic auth config
 
 ### Debounced Sync
 - **`Debouncer`** - Coalesce multiple sync requests into one operation
@@ -91,6 +92,40 @@ func main() {
         status.InSync, status.LocalTXID, status.RemoteTXID)
 }
 ```
+
+## S3 Auth Configuration
+
+By default, litestream uses `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment
+variables. Use `NewS3ReplicaClient` to override credentials programmatically:
+
+```go
+// Create S3 client with explicit credentials (overrides env vars)
+client, err := litestreamlib.NewS3ReplicaClient(litestreamlib.S3Config{
+    Bucket:          "my-bucket",
+    Path:            "backups/mydb",
+    Region:          "us-west-2",
+    AccessKeyID:     "your-access-key",     // Optional: overrides AWS_ACCESS_KEY_ID
+    SecretAccessKey: "your-secret-key",     // Optional: overrides AWS_SECRET_ACCESS_KEY
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// For S3-compatible services (MinIO, Backblaze B2, etc.)
+client, err := litestreamlib.NewS3ReplicaClient(litestreamlib.S3Config{
+    Bucket:          "my-bucket",
+    Path:            "backups",
+    Endpoint:        "https://s3.us-west-002.backblazeb2.com",
+    ForcePathStyle:  true,
+    AccessKeyID:     os.Getenv("B2_ACCESS_KEY"),
+    SecretAccessKey: os.Getenv("B2_SECRET_KEY"),
+})
+
+// Use with litestream DB
+db := litestream.NewDB("/path/to/my.db")
+db.Replica = litestream.NewReplicaWithClient(db, client)
+```
+
 
 ## Debouncer for API Use
 
